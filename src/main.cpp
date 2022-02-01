@@ -2,7 +2,6 @@
 
 // Globals
 static QueueHandle_t msg_queue;
-BaseType_t xHigherPriorityTaskWoken;
 
 int leftEncoderCount = 0;     // running count of left encoder counts
 int rightEncoderCount = 0;    // running count of right encoder counts
