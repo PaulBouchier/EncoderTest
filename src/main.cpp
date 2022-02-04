@@ -4,7 +4,9 @@
 
 // Globals
 QueueHandle_t encoderMsgQ;
-MowbotOdometry mowbotOdometry(encoderMsgQ);
+MowbotOdometry mowbotOdometry(encoderMsgQ, motorsCmdStatus);
+
+// Local object instantiations
 static TaskHandle_t mowbotOdometryTaskHandle = NULL;
 
 // @brief static function to call run() method
@@ -17,7 +19,7 @@ void setup() {
   bool isok = true;
 
   // Configure Serial
-  Serial.begin(9600);
+  Serial.begin(115200);
   // Wait a moment to start (so we don't miss Serial output)
   vTaskDelay(4000);
 

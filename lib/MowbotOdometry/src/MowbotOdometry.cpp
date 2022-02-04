@@ -1,5 +1,6 @@
 #include <MowbotOdometry.h>
 #include <ArduinoLog.h>
+#include <cmath>
 
 extern QueueHandle_t encoderMsgQ;
 
@@ -97,14 +98,33 @@ MowbotOdometry::run(void* params)
         lastRightTick_ = msgBuf.tickCount;
       }
     }
+
+    // Use motor direction from RL500CmdTask to set encoders fwd/backwd
+    if (!leftFwd_)
+      deltaLCounts = -deltaLCounts;
+  
+    if (!rightFwd_)
+      deltaRCounts = -deltaRCounts;
   
     leftEncoderCount_ += deltaLCounts;
     rightEncoderCount_ += deltaRCounts;
+
+    float deltaL_m = deltaLCounts * encoderMetersPerIrq;
+    float deltaR_m = deltaRCounts * encoderMetersPerIrq;
+    float deltaD_m = (deltaL_m + deltaR_m) / 2.0;   // distance traveled this frame
+    float deltaHeading = (deltaR_m - deltaL_m) / wheelbase_m;  // radians turned this frame
+    odometer_m_ += deltaD_m;
+
+    heading_rad_ += deltaHeading;
+    heading_rad_ -= (float)((int)(heading_rad_ / (2 * M_PI))) * 2 * M_PI;  // clip to +/- 2 * pi
   
+    poseX_m_ += deltaD_m * sin(heading_rad_);
+    poseY_m_ += deltaD_m * cos(heading_rad_);
+
     // compute speed based on most recent deltaTicks if any counts received, else speed is 0
     if(deltaLCounts > 0)
     {
-      leftSpeed_ = encoderMetersPerTick / static_cast<float>(deltaLTicks) * 1000.0;
+      leftSpeed_ = encoderMetersPerIrq / static_cast<float>(deltaLTicks) * 1000.0;
     }
     else
     {
@@ -112,7 +132,7 @@ MowbotOdometry::run(void* params)
     }
     if(deltaRCounts > 0)
     {
-      rightSpeed_ = encoderMetersPerTick / static_cast<float>(deltaRTicks) * 1000.0;
+      rightSpeed_ = encoderMetersPerIrq / static_cast<float>(deltaRTicks) * 1000.0;
     }
     else
     {
@@ -132,4 +152,11 @@ MowbotOdometry::getOdometry(int& leftCounts, float& speedL, int& rightCounts, fl
   speedL = leftSpeed_;
   rightCounts = rightEncoderCount_;
   speedR = rightSpeed_;
+}
+
+void
+MowbotOdometry::setWheelDirections(bool leftFwd, bool rightFwd)
+{
+  leftFwd_ = leftFwd;
+  rightFwd_ = rightFwd;
 }
