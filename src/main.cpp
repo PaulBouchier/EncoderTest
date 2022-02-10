@@ -1,13 +1,20 @@
 #include <Arduino.h>
 #include <MowbotOdometry.h>
 #include <ArduinoLog.h>
+#include <cmath>
 
 // Globals
 QueueHandle_t encoderMsgQ;
-MowbotOdometry mowbotOdometry(encoderMsgQ, motorsCmdStatus);
+MowbotOdometry mowbotOdometry(encoderMsgQ);
 
 // Local object instantiations
 static TaskHandle_t mowbotOdometryTaskHandle = NULL;
+
+// @brief test whether two floats are approximately equal
+bool approximatelyEqual(float a, float b, float epsilon)
+{
+    return fabs(a - b) <= ( (fabs(a) < fabs(b) ? fabs(b) : fabs(a)) * epsilon);
+}
 
 // @brief static function to call run() method
 void static startOdometryTask(void* params)
@@ -54,28 +61,26 @@ void setup() {
   }
 }
 
-void loop() {
-  int leftEncoderCounts;
-  int rightEncoderCounts;
-  static int lastLeftEncoderCounts = 0;
-  static int lastRightEncoderCounts = 0;
-  float leftSpeed;
-  float rightSpeed;
+static float poseX = 0.0;
+static float poseY = 0.0;
+static float heading = 0.0;
+static float leftSpeed;
+static float rightSpeed;
+static int leftEnc = 0;
+static int rightEnc = 0;
+static int lastLeftEnc = 0;
+static int lastRightEnc = 0;
 
-  mowbotOdometry.getOdometry(leftEncoderCounts, leftSpeed, rightEncoderCounts, rightSpeed);
-  if (leftEncoderCounts != lastLeftEncoderCounts || rightEncoderCounts != lastRightEncoderCounts)
+void loop() {
+  mowbotOdometry.getOdometry(poseX, poseY, heading, leftSpeed, rightSpeed, leftEnc, rightEnc);
+  if (leftEnc != lastLeftEnc || rightEnc != lastRightEnc)
   {
-    Serial.print("left encoder counts: ");
-    Serial.print(leftEncoderCounts);
-    Serial.print(" left speed: ");
-    Serial.print(leftSpeed);
-    Serial.print(" right encoder counts: ");
-    Serial.print(rightEncoderCounts);
-    Serial.print(" right speed: ");
-    Serial.print(rightSpeed);
-    Serial.println();
-    lastLeftEncoderCounts = leftEncoderCounts;
-    lastRightEncoderCounts = rightEncoderCounts;
+    char odomMsg[100];
+    sprintf(odomMsg, "poseX: %0.2f m, poseY: %0.2f m, heading: %0.0f deg, left speed: %0.2f m/s, right speed: %0.2f m/s",
+            poseX, poseY, heading * (180 / M_PI), leftSpeed, rightSpeed);
+    Serial.println(odomMsg);
+    lastLeftEnc = leftEnc;
+    lastRightEnc = rightEnc;
   }
   vTaskDelay(100);
 }

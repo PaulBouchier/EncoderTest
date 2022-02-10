@@ -34,8 +34,10 @@ MowbotOdometry::init()
   bool isok = true;
 
   // configure encoder input pins & attach interrupt handlers
-  const int interruptPinLeft = 14;
-  const int interruptPinRight = 15;
+  // FIXME: There's a discrepancy between the drawio wiring diatram & pins 14/15 w.rt. left/right.
+  // RESOLVE IT
+  const int interruptPinLeft = 15;
+  const int interruptPinRight = 14;
 
   pinMode(interruptPinLeft, INPUT_PULLUP);
   pinMode(interruptPinRight, INPUT_PULLUP);
@@ -146,12 +148,15 @@ MowbotOdometry::run(void* params)
 }
 
 void
-MowbotOdometry::getOdometry(int& leftCounts, float& speedL, int& rightCounts, float& speedR)
+MowbotOdometry::getOdometry(float& poseX, float& poseY, float& heading, float& speedL, float& speedR, int& leftEnc, int& rightEnc)
 {
-  leftCounts = leftEncoderCount_;
+  poseX = poseX_m_;
+  poseY = poseY_m_;
+  heading = heading_rad_;
   speedL = leftSpeed_;
-  rightCounts = rightEncoderCount_;
   speedR = rightSpeed_;
+  leftEnc = leftEncoderCount_;
+  rightEnc = rightEncoderCount_;
 }
 
 void

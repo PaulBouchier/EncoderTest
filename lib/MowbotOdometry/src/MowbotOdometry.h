@@ -18,7 +18,7 @@ public:
   MowbotOdometry(QueueHandle_t& encoderMsgQ);
   bool init();      // initialize MowbotOdometry
   void run(void* params);       // odometry task starts running here
-  void getOdometry(int& leftCounts, float& speedL, int& rightCounts, float& speedR);
+  void getOdometry(float& poseX, float& poseY, float& heading,  float& speedL, float& speedR, int& leftEnc, int& rightEnc);
   void setWheelDirections(bool leftFwd, bool rightFwd);
 private:
   const float encoderMetersPerIrq = 0.0075;   // how far mowbot travels each endoder transition
