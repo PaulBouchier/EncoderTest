@@ -4,23 +4,13 @@
 #include <cmath>
 
 // Globals
-QueueHandle_t encoderMsgQ;
-MowbotOdometry mowbotOdometry(encoderMsgQ);
+MowbotOdometry mowbotOdometry;
 
 // Local object instantiations
 static TaskHandle_t mowbotOdometryTaskHandle = NULL;
 
-// @brief test whether two floats are approximately equal
-bool approximatelyEqual(float a, float b, float epsilon)
-{
-    return fabs(a - b) <= ( (fabs(a) < fabs(b) ? fabs(b) : fabs(a)) * epsilon);
-}
-
 // @brief static function to call run() method
-void static startOdometryTask(void* params)
-{
-  mowbotOdometry.run(params);
-}
+void static startOdometryTask(void* params) { mowbotOdometry.run(params); }
 
 void setup() {
   bool isok = true;

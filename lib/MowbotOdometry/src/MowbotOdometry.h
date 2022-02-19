@@ -15,7 +15,7 @@ public:
   * @param encoderMsgQ A handle to the queue of encoder timestamps from the ISR
   * @param motorCmdStatus Struct providing current motor direction
   */
-  MowbotOdometry(QueueHandle_t& encoderMsgQ);
+  MowbotOdometry();
   bool init();      // initialize MowbotOdometry
   void run(void* params);       // odometry task starts running here
   void getOdometry(float& poseX, float& poseY, float& heading,  float& speedX, float& speedY, float& linearSpeed,
@@ -37,7 +37,6 @@ private:
   float angular_speed_rps_ = 0; // rotational speed in rad/sec
   float odometer_m_ = 0;        // not needed for anything specific
 
-  QueueHandle_t& encoderMsgQ_;
   int leftEncoderCount_ = 0;     // running count of left encoder counts
   int rightEncoderCount_ = 0;    // running count of right encoder counts
   TickType_t lastLeftTick_ = 0;  // Time when last left tick was observed

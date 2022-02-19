@@ -2,30 +2,42 @@
 #include <messages/TxOdometry.h>
 #include <ArduinoLog.h>
 #include <cmath>
+#include <CircularBuffer.h>
 
-extern QueueHandle_t encoderMsgQ;
+/*
+ * \brief encoder message queue length
+ * \details At full speed each wheel will see about 80 transitions (80 interrupts)
+ * each resulting in an encInterruptMsg. This queue needs to be big enough to handle
+ * them until emptied (which should happen each 50ms frame). Allow 2x capacity margin
+ * in case base encoder task is late to run in a subsequent frame. I.e. max number of
+ * items should be:
+ * 2 (margin) * (80 (counts/sec) / 20 (frames/sec)) (max 8 interrupts/frame)
+ */
+// Instantiate circular buffers for left & right enconder timestamps
+static const size_t bufferSize = 10;
+static TickType_t leftEncBuf[bufferSize];
+static CircularBuffer_<TickType_t> leftEncCircBuf(leftEncBuf, bufferSize);
+static TickType_t rightEncBuf[bufferSize];
+static CircularBuffer_<TickType_t> rightEncCircBuf(rightEncBuf, bufferSize);
+
+// Time measurement support
+TickType_t startTime;
+TickType_t endTime;
 
 // encoder ISRs - global names for now, using global Q name
 void IRAM_ATTR leftEncChange()
 {
-  EncoderInterruptMsg encMsg;
-  encMsg.leftFlag = true;
-  encMsg.tickCount = xTaskGetTickCountFromISR();
-
-  xQueueSendFromISR(encoderMsgQ, &encMsg, NULL);   // enqueue transition time
+  TickType_t encTimestamp = xTaskGetTickCountFromISR();
+  leftEncCircBuf.put(encTimestamp);
 }
 
 void IRAM_ATTR rightEncChange()
 {
-  EncoderInterruptMsg encMsg;
-  encMsg.leftFlag = false;
-  encMsg.tickCount = xTaskGetTickCountFromISR();
-
-  xQueueSendFromISR(encoderMsgQ, &encMsg, NULL);   // enqueue transition time
+  TickType_t encTimestamp = xTaskGetTickCountFromISR();
+  rightEncCircBuf.put(encTimestamp);
 }
 
-MowbotOdometry::MowbotOdometry(QueueHandle_t& encoderMsgQ)
-  : encoderMsgQ_(encoderMsgQ)
+MowbotOdometry::MowbotOdometry()
 {
 }
 
@@ -45,23 +57,6 @@ MowbotOdometry::init()
   attachInterrupt(digitalPinToInterrupt(interruptPinLeft), leftEncChange, CHANGE);
   attachInterrupt(digitalPinToInterrupt(interruptPinRight), rightEncChange, CHANGE);
 
-/*
- * \brief encoder message queue length
- * \details At full speed each wheel will see about 80 transitions (80 interrupts)
- * each resulting in an encInterruptMsg. This queue needs to be big enough to handle
- * them until emptied (which should happen each 50ms frame). Allow 2x capacity margin
- * in case base encoder task is late to run in a subsequent frame. I.e. max number of
- * items should be:
- * 2 (encoders) * 2 (margin) * (80 (counts/sec) / 20 (frames/sec)) (max 4 interrupts/frame)
- */
-  static const uint8_t msg_queue_len = 16;
-
-  // Create queue of encoder transition times
-  encoderMsgQ_ = xQueueCreate(msg_queue_len, sizeof(EncoderInterruptMsg));
-  if (NULL == encoderMsgQ_)
-  {
-    isok = false;
-  }
   return isok;
 }
 
@@ -80,26 +75,28 @@ MowbotOdometry::run(void* params)
     int deltaLTicks = 0;
     int deltaRCounts = 0;
     int deltaRTicks = 0;
-    EncoderInterruptMsg msgBuf;
     int msgCount = 0;
   
     // Read encoder messages while there are any enqueued
-    while (uxQueueMessagesWaiting(encoderMsgQ))
+    TickType_t encLTime;
+    TickType_t encRTime;
+
+    while (!leftEncCircBuf.empty())
     {
-      xQueueReceive(encoderMsgQ, &msgBuf, 0);
-      msgCount++;
-      if(msgBuf.leftFlag)
-      {
-        deltaLCounts++;
-        deltaLTicks = msgBuf.tickCount - lastLeftTick_;
-        lastLeftTick_ = msgBuf.tickCount;
-      }
-      else
-      {
-        deltaRCounts++;
-        deltaRTicks = msgBuf.tickCount - lastRightTick_;
-        lastRightTick_ = msgBuf.tickCount;
-      }
+      ++msgCount;
+      leftEncCircBuf.get(encLTime);
+      ++deltaLCounts;
+      deltaLTicks = encLTime - lastLeftTick_;
+      lastLeftTick_ = encLTime;
+    }
+
+    while (!rightEncCircBuf.empty())
+    {
+      ++msgCount;
+      rightEncCircBuf.get(encRTime);
+      ++deltaRCounts;
+      deltaRTicks = encRTime - lastRightTick_;
+      lastRightTick_ = encLTime;
     }
 
     // Use motor direction from RL500CmdTask to set encoders fwd/backwd
