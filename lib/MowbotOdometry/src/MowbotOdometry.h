@@ -18,16 +18,24 @@ public:
   MowbotOdometry(QueueHandle_t& encoderMsgQ);
   bool init();      // initialize MowbotOdometry
   void run(void* params);       // odometry task starts running here
-  void getOdometry(float& poseX, float& poseY, float& heading,  float& speedL, float& speedR, int& leftEnc, int& rightEnc);
+  void getOdometry(float& poseX, float& poseY, float& heading,  float& speedX, float& speedY, float& linearSpeed,
+                  float& angular_speed, float& odometer, float& speedL, float& speedR);
+  void getWheelSpeeds(float& speedL, float& speedR);
+  void getEncoders(int& leftEnc, int& rightEnc);
   void setWheelDirections(bool leftFwd, bool rightFwd);
 private:
   const float encoderMetersPerIrq = 0.0075;   // how far mowbot travels each endoder transition
   const float wheelbase_m = 0.444;      // distance between mowbot rear wheels
+  const int frameTime_ms = 50;
 
-  float poseX_m_ = 0;       // x location relative to start
-  float poseY_m_ = 0;       // y location relative to start
-  float heading_rad_ = 0;   // heading relative to start, in ENU coord frame (+ve is CCW)
-  float odometer_m_ = 0;    // not needed for anything specific
+  float poseX_m_ = 0;           // x location relative to start
+  float poseY_m_ = 0;           // y location relative to start
+  float heading_rad_ = 0;       // heading relative to start, in ENU coord frame (+ve is CCW)
+  float speedX_mps_ = 0;        // speed in X direction
+  float speedY_mps_ = 0;        // speed in Y direction
+  float linear_speed_mps_ = 0;  // linear speed in m/sec
+  float angular_speed_rps_ = 0; // rotational speed in rad/sec
+  float odometer_m_ = 0;        // not needed for anything specific
 
   QueueHandle_t& encoderMsgQ_;
   int leftEncoderCount_ = 0;     // running count of left encoder counts

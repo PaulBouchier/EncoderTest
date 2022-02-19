@@ -1,4 +1,5 @@
 #include <MowbotOdometry.h>
+#include <messages/TxOdometry.h>
 #include <ArduinoLog.h>
 #include <cmath>
 
@@ -114,8 +115,9 @@ MowbotOdometry::run(void* params)
     float deltaL_m = deltaLCounts * encoderMetersPerIrq;
     float deltaR_m = deltaRCounts * encoderMetersPerIrq;
     float deltaD_m = (deltaL_m + deltaR_m) / 2.0;   // distance traveled this frame
-    float deltaHeading = (deltaR_m - deltaL_m) / wheelbase_m;  // radians turned this frame
     odometer_m_ += deltaD_m;
+    float deltaHeading = (deltaR_m - deltaL_m) / wheelbase_m;  // radians turned this frame
+    angular_speed_rps_ = deltaHeading * (1000 / frameTime_ms);
 
     heading_rad_ += deltaHeading;
     heading_rad_ -= (float)((int)(heading_rad_ / (2 * M_PI))) * 2 * M_PI;  // clip to +/- 2 * pi
@@ -141,20 +143,45 @@ MowbotOdometry::run(void* params)
       rightSpeed_ = 0.0;
     }
 
+    linear_speed_mps_ = (leftSpeed_ + rightSpeed_) / 2.0;
+    speedX_mps_ = linear_speed_mps_ * sin(heading_rad_);
+    speedY_mps_ = linear_speed_mps_ * cos(heading_rad_);
+
+
     // delay until start of next 50ms frame
-    vTaskDelayUntil(&lastFrameTime, 50);
+    vTaskDelayUntil(&lastFrameTime, frameTime_ms);
   }
 
 }
 
 void
-MowbotOdometry::getOdometry(float& poseX, float& poseY, float& heading, float& speedL, float& speedR, int& leftEnc, int& rightEnc)
+MowbotOdometry::getOdometry(float& poseX, float& poseY, float& heading,
+                            float& speedX, float& speedY, float& linearSpeed,
+                            float& angular_speed, float& odometer,
+                            float& speedL, float& speedR)
 {
   poseX = poseX_m_;
   poseY = poseY_m_;
   heading = heading_rad_;
+  speedX = speedX_mps_;
+  speedY = speedY_mps_;
+  linearSpeed = linear_speed_mps_;
+  angular_speed = angular_speed_rps_;
+  odometer = odometer_m_;
   speedL = leftSpeed_;
   speedR = rightSpeed_;
+}
+
+void
+MowbotOdometry::getWheelSpeeds(float& speedL, float& speedR)
+{
+  speedL = leftSpeed_;
+  speedR = rightSpeed_;
+}
+
+void
+MowbotOdometry::getEncoders(int& leftEnc, int& rightEnc)
+{
   leftEnc = leftEncoderCount_;
   rightEnc = rightEncoderCount_;
 }

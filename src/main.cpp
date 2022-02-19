@@ -64,6 +64,11 @@ void setup() {
 static float poseX = 0.0;
 static float poseY = 0.0;
 static float heading = 0.0;
+static float speedX = 0.0;
+static float speedY = 0.0;
+static float linearSpeed = 0.0;
+static float angularSpeed = 0.0;
+static float odometer = 0.0;
 static float leftSpeed;
 static float rightSpeed;
 static int leftEnc = 0;
@@ -72,7 +77,8 @@ static int lastLeftEnc = 0;
 static int lastRightEnc = 0;
 
 void loop() {
-  mowbotOdometry.getOdometry(poseX, poseY, heading, leftSpeed, rightSpeed, leftEnc, rightEnc);
+  mowbotOdometry.getEncoders(leftEnc, rightEnc);
+  mowbotOdometry.getOdometry(poseX, poseY, heading, speedX, speedY, linearSpeed, angularSpeed, odometer, leftSpeed, rightSpeed);
   if (leftEnc != lastLeftEnc || rightEnc != lastRightEnc)
   {
     char odomMsg[100];
