@@ -1,8 +1,14 @@
 #include <MowbotOdometry.h>
 #include <messages/TxOdometry.h>
-#include <ArduinoLog.h>
 #include <cmath>
 #include <CircularBuffer.h>
+
+extern MowbotOdometry mowbotOdometry;
+
+// Local object instantiations
+
+// @brief static function to call run() method
+void static startOdometryTask(void* params) { mowbotOdometry.run(params); }
 
 /*
  * \brief encoder message queue length
@@ -42,9 +48,12 @@ MowbotOdometry::MowbotOdometry()
 }
 
 bool
-MowbotOdometry::init()
+MowbotOdometry::init(Stream* logStream)
 {
   bool isok = true;
+
+  odomLog_.begin(LOG_LEVEL_INFO, logStream);
+  odomLog_.infoln("MowbotOdometry::init()");
 
   // configure encoder input pins & attach interrupt handlers
   // FIXME: There's a discrepancy between the drawio wiring diatram & pins 14/15 w.rt. left/right.
@@ -57,13 +66,39 @@ MowbotOdometry::init()
   attachInterrupt(digitalPinToInterrupt(interruptPinLeft), leftEncChange, CHANGE);
   attachInterrupt(digitalPinToInterrupt(interruptPinRight), rightEncChange, CHANGE);
 
+  if (!isok)
+  {
+    while(true)   // hang here forever if initialization fails
+    {
+      odomLog_.fatalln("MowbotOdometry init() failed");
+      vTaskDelay(10000);
+    }
+  }
+
+  // create MowbotOdometry task
+  BaseType_t rv = xTaskCreate(
+                    startOdometryTask,
+                    "MowbotOdometry Task",
+                    4096,
+                    NULL,
+                    1,
+                    &mowbotOdometryTaskHandle_);
+  if (rv != pdTRUE)
+  {
+    while(true)   // hang here forever if task creation failed
+    {
+      odomLog_.fatalln("Failed to create MowbotOdometry task");
+      vTaskDelay(10000);   // periodically print the failed message
+    }
+  }
+
   return isok;
 }
 
 void
 MowbotOdometry::run(void* params)
 {
-  Log.infoln("Running MowbotOdometryTask");
+  odomLog_.infoln("Running MowbotOdometryTask");
 
   // frame time keeper
   TickType_t lastFrameTime = xTaskGetTickCount();
@@ -96,7 +131,7 @@ MowbotOdometry::run(void* params)
       rightEncCircBuf.get(encRTime);
       ++deltaRCounts;
       deltaRTicks = encRTime - lastRightTick_;
-      lastRightTick_ = encLTime;
+      lastRightTick_ = encRTime;
     }
 
     // Use motor direction from RL500CmdTask to set encoders fwd/backwd
@@ -126,6 +161,7 @@ MowbotOdometry::run(void* params)
     if(deltaLCounts > 0)
     {
       leftSpeed_ = encoderMetersPerIrq / static_cast<float>(deltaLTicks) * 1000.0;
+      odomLog_.verboseln("leftSpeed: %F", leftSpeed_);
     }
     else
     {
@@ -134,6 +170,7 @@ MowbotOdometry::run(void* params)
     if(deltaRCounts > 0)
     {
       rightSpeed_ = encoderMetersPerIrq / static_cast<float>(deltaRTicks) * 1000.0;
+      odomLog_.verboseln("rightSpeed: %F", rightSpeed_);
     }
     else
     {
@@ -144,6 +181,10 @@ MowbotOdometry::run(void* params)
     speedX_mps_ = linear_speed_mps_ * sin(heading_rad_);
     speedY_mps_ = linear_speed_mps_ * cos(heading_rad_);
 
+    // Publish odometry
+    Odometry odom;
+    populateOdomStruct(odom);
+    mediator_->publishOdometry(odom);
 
     // delay until start of next 50ms frame
     vTaskDelayUntil(&lastFrameTime, frameTime_ms);
@@ -170,6 +211,24 @@ MowbotOdometry::getOdometry(float& poseX, float& poseY, float& heading,
 }
 
 void
+MowbotOdometry::populateOdomStruct(Odometry& odom)
+{
+  odom.poseX_m = poseX_m_;
+  odom.poseY_m = poseY_m_;
+  odom.heading_rad = heading_rad_;
+  odom.speedX_mps = speedX_mps_;
+  odom.speedY_mps = speedY_mps_;
+  odom.linear_speed_mps = linear_speed_mps_;
+  odom.angular_speed_rps = angular_speed_rps_;
+  odom.odometer_m = odometer_m_;
+  odom.leftSpeed = leftSpeed_;
+  odom.rightSpeed = rightSpeed_;
+
+  odom.leftEncoderCount = leftEncoderCount_;
+  odom.rightEncoderCount = rightEncoderCount_;
+}
+
+void
 MowbotOdometry::getWheelSpeeds(float& speedL, float& speedR)
 {
   speedL = leftSpeed_;
@@ -188,4 +247,10 @@ MowbotOdometry::setWheelDirections(bool leftFwd, bool rightFwd)
 {
   leftFwd_ = leftFwd;
   rightFwd_ = rightFwd;
+}
+
+void
+MowbotOdometry::setMediator(Mediator* mediator)
+{
+  mediator_ = mediator;
 }
