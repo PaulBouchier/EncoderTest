@@ -27,7 +27,7 @@ OdomMediator::publishOdometry(Odometry odom)
     char odomMsg[200];
     snprintf(odomMsg, 200, "EncoderMediator saw poseX: %0.2f m, poseY: %0.2f m, heading: %0.0f deg, left speed: %0.2f m/s, right speed: %0.2f m/s",
             poseX_m_, poseY_m_, heading_rad_ * (180 / M_PI), leftSpeed_, rightSpeed_);
-    Serial.println(odomMsg);
+    mowbotOdometry_.odomLog_.verboseln(odomMsg);
     lastLeftEncCnt_ = leftEncoderCount_;
     lastRightEncCnt_ = rightEncoderCount_;
   }

@@ -26,7 +26,7 @@ class MowbotOdometry
 {
 public:
   MowbotOdometry();
-  bool init(Stream* logStream); // initialize MowbotOdometry, passing a stream pointer for logging
+  bool init(Stream* logStream, int logLevel); // initialize MowbotOdometry, passing a stream pointer for logging
   void run(void* params);       // odometry task starts running here
   void getOdometry(float& poseX, float& poseY, float& heading,  float& speedX, float& speedY, float& linearSpeed,
                   float& angular_speed, float& odometer, float& speedL, float& speedR);

@@ -47,11 +47,11 @@ MowbotOdometry::MowbotOdometry()
 }
 
 bool
-MowbotOdometry::init(Stream* logStream)
+MowbotOdometry::init(Stream* logStream, int logLevel)
 {
   bool isok = true;
 
-  odomLog_.begin(LOG_LEVEL_INFO, logStream);
+  odomLog_.begin(logLevel, logStream);
   odomLog_.infoln("MowbotOdometry::init()");
 
   // configure encoder input pins & attach interrupt handlers
@@ -65,13 +65,11 @@ MowbotOdometry::init(Stream* logStream)
   attachInterrupt(digitalPinToInterrupt(interruptPinLeft), leftEncChange, CHANGE);
   attachInterrupt(digitalPinToInterrupt(interruptPinRight), rightEncChange, CHANGE);
 
-  if (!isok)
+  // hang here forever if initialization fails
+  while(!isok)
   {
-    while(true)   // hang here forever if initialization fails
-    {
-      odomLog_.fatalln("MowbotOdometry init() failed");
-      vTaskDelay(10000);
-    }
+    Serial.println("MowbotOdometry init() failed");
+    vTaskDelay(1000);
   }
 
   // create MowbotOdometry task
@@ -82,13 +80,12 @@ MowbotOdometry::init(Stream* logStream)
                     NULL,
                     1,
                     &mowbotOdometryTaskHandle_);
-  if (rv != pdTRUE)
+
+  // hang here forever if task creation failed
+  while(rv != pdTRUE)
   {
-    while(true)   // hang here forever if task creation failed
-    {
-      odomLog_.fatalln("Failed to create MowbotOdometry task");
-      vTaskDelay(10000);   // periodically print the failed message
-    }
+    odomLog_.fatalln("Failed to create MowbotOdometry task; stopped");
+    vTaskDelay(2000);   // periodically print the failed message
   }
 
   return isok;
@@ -160,7 +157,6 @@ MowbotOdometry::run(void* params)
     if(deltaLCounts > 0)
     {
       leftSpeed_ = encoderMetersPerIrq / static_cast<float>(deltaLTicks) * 1000.0;
-      odomLog_.verboseln("leftSpeed: %F", leftSpeed_);
     }
     else
     {
@@ -169,7 +165,6 @@ MowbotOdometry::run(void* params)
     if(deltaRCounts > 0)
     {
       rightSpeed_ = encoderMetersPerIrq / static_cast<float>(deltaRTicks) * 1000.0;
-      odomLog_.verboseln("rightSpeed: %F", rightSpeed_);
     }
     else
     {
