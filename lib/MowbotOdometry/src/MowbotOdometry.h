@@ -2,31 +2,17 @@
 
 #include <Arduino.h>
 #include <ArduinoLog.h>
-#include "../../../src/OdomMediator.h"
+#include <OdometryMsg.h>
+#include <Mediator.h>
 
 class Mediator;
 
-struct Odometry {
-  float poseX_m;
-  float poseY_m;
-  float heading_rad;
-  float speedX_mps;
-  float speedY_mps;
-  float linear_speed_mps;
-  float angular_speed_rps;
-  float odometer_m;
-  float leftSpeed;
-  float rightSpeed;
-
-  int leftEncoderCount;
-  int rightEncoderCount;
-};
 
 class MowbotOdometry
 {
 public:
   MowbotOdometry();
-  bool init(Stream* logStream, int logLevel); // initialize MowbotOdometry, passing a stream pointer for logging
+  bool init(int logLevel, Stream* logStream=NULL); // initialize MowbotOdometry, passing a stream pointer for logging
   void run(void* params);       // odometry task starts running here
   void getOdometry(float& poseX, float& poseY, float& heading,  float& speedX, float& speedY, float& linearSpeed,
                   float& angular_speed, float& odometer, float& speedL, float& speedR);
@@ -34,10 +20,10 @@ public:
   void getEncoders(int& leftEnc, int& rightEnc);
   void setWheelDirections(bool leftFwd, bool rightFwd);
   Logging odomLog_;
-  void setMediator(Mediator* mediator);
+  void setMediator(Mediator* mediator) { mediator_ = mediator; }
 
 private:
-  void populateOdomStruct(Odometry& odometry);
+  void populateOdomStruct(OdometryMsg& odometry);
 
   const float encoderMetersPerIrq = 0.0075;   // how far mowbot travels each endoder transition
   const float wheelbase_m = 0.444;      // distance between mowbot rear wheels

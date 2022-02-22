@@ -1,6 +1,7 @@
 #include <MowbotOdometry.h>
 #include <cmath>
 #include <CircularBuffer.h>
+#include <LogStream.h>
 
 extern MowbotOdometry mowbotOdometry;
 
@@ -29,6 +30,22 @@ static CircularBuffer_<TickType_t> rightEncCircBuf(rightEncBuf, bufferSize);
 TickType_t startTime;
 TickType_t endTime;
 
+// Prefix print function for logs from this object
+static void printPrefix(Print* logOutput, int logLevel)
+{
+  switch(logLevel)
+  {
+    default:
+    case 0: logOutput->print("S: Odom: "); break;
+    case 1: logOutput->print("F: Odom: "); break;
+    case 2: logOutput->print("E: Odom: "); break;
+    case 3: logOutput->print("W: Odom: "); break;
+    case 4: logOutput->print("I: Odom: "); break;
+    case 5: logOutput->print("T: Odom: "); break;
+    case 6: logOutput->print("V: Odom: "); break;
+  }
+}
+
 // encoder ISRs - global names for now, using global Q name
 void IRAM_ATTR leftEncChange()
 {
@@ -47,11 +64,25 @@ MowbotOdometry::MowbotOdometry()
 }
 
 bool
-MowbotOdometry::init(Stream* logStream, int logLevel)
+MowbotOdometry::init(int logLevel, Stream* stream_p)
 {
   bool isok = true;
 
-  odomLog_.begin(logLevel, logStream);
+  // Start logger
+  if (stream_p == NULL)
+  {  
+    // No logStream provided, use logStream
+    LogStream* logStream_p = new LogStream();
+    logStream_p->setMediator(mediator_);
+    odomLog_.begin(logLevel, logStream_p);
+  }
+  else
+  {
+    odomLog_.begin(logLevel, stream_p);
+  }
+  odomLog_.setPrefix(printPrefix);
+  odomLog_.setShowLevel(false);
+
   odomLog_.infoln("MowbotOdometry::init()");
 
   // configure encoder input pins & attach interrupt handlers
@@ -65,13 +96,6 @@ MowbotOdometry::init(Stream* logStream, int logLevel)
   attachInterrupt(digitalPinToInterrupt(interruptPinLeft), leftEncChange, CHANGE);
   attachInterrupt(digitalPinToInterrupt(interruptPinRight), rightEncChange, CHANGE);
 
-  // hang here forever if initialization fails
-  while(!isok)
-  {
-    Serial.println("MowbotOdometry init() failed");
-    vTaskDelay(1000);
-  }
-
   // create MowbotOdometry task
   BaseType_t rv = xTaskCreate(
                     startOdometryTask,
@@ -84,6 +108,7 @@ MowbotOdometry::init(Stream* logStream, int logLevel)
   // hang here forever if task creation failed
   while(rv != pdTRUE)
   {
+    Serial.println("Failed to create MowbotOdometry task; stopped");
     odomLog_.fatalln("Failed to create MowbotOdometry task; stopped");
     vTaskDelay(2000);   // periodically print the failed message
   }
@@ -176,7 +201,7 @@ MowbotOdometry::run(void* params)
     speedY_mps_ = linear_speed_mps_ * cos(heading_rad_);
 
     // Publish odometry
-    Odometry odom;
+    OdometryMsg odom;
     populateOdomStruct(odom);
     mediator_->publishOdometry(odom);
 
@@ -205,7 +230,7 @@ MowbotOdometry::getOdometry(float& poseX, float& poseY, float& heading,
 }
 
 void
-MowbotOdometry::populateOdomStruct(Odometry& odom)
+MowbotOdometry::populateOdomStruct(OdometryMsg& odom)
 {
   odom.poseX_m = poseX_m_;
   odom.poseY_m = poseY_m_;
@@ -243,8 +268,3 @@ MowbotOdometry::setWheelDirections(bool leftFwd, bool rightFwd)
   rightFwd_ = rightFwd;
 }
 
-void
-MowbotOdometry::setMediator(Mediator* mediator)
-{
-  mediator_ = mediator;
-}
