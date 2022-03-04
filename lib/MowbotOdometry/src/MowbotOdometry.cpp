@@ -96,6 +96,8 @@ MowbotOdometry::init(int logLevel, Stream* stream_p)
   attachInterrupt(digitalPinToInterrupt(interruptPinLeft), leftEncChange, CHANGE);
   attachInterrupt(digitalPinToInterrupt(interruptPinRight), rightEncChange, CHANGE);
 
+  wheelDirMutex_ = xSemaphoreCreateMutex();
+
   // create MowbotOdometry task
   BaseType_t rv = xTaskCreate(
                     startOdometryTask,
@@ -119,6 +121,8 @@ MowbotOdometry::init(int logLevel, Stream* stream_p)
 void
 MowbotOdometry::run(void* params)
 {
+  TickType_t frameStartTime;
+
   odomLog_.infoln("Running MowbotOdometryTask");
 
   // frame time keeper
@@ -127,6 +131,8 @@ MowbotOdometry::run(void* params)
   // loop forever in the task, updating the global odometry struct
   while (true)
   {
+    frameStartTime = xTaskGetTickCount();
+
     int deltaLCounts = 0;
     int deltaLTicks = 0;
     int deltaRCounts = 0;
@@ -164,6 +170,8 @@ MowbotOdometry::run(void* params)
   
     leftEncoderCount_ += deltaLCounts;
     rightEncoderCount_ += deltaRCounts;
+    leftWheelAngle_rad_ = fmod(leftEncoderCount_, irqsPerRot) * TWO_PI;
+    rightWheelAngle_rad_ = fmod(rightEncoderCount_, irqsPerRot) * TWO_PI;
 
     float deltaL_m = deltaLCounts * encoderMetersPerIrq;
     float deltaR_m = deltaRCounts * encoderMetersPerIrq;
@@ -175,21 +183,25 @@ MowbotOdometry::run(void* params)
     heading_rad_ += deltaHeading;
     heading_rad_ -= (float)((int)(heading_rad_ / (2 * M_PI))) * 2 * M_PI;  // clip to +/- 2 * pi
   
-    poseX_m_ += deltaD_m * sin(heading_rad_);
-    poseY_m_ += deltaD_m * cos(heading_rad_);
+    poseX_m_ += deltaD_m * cos(heading_rad_);
+    poseY_m_ += deltaD_m * sin(heading_rad_);
 
     // compute speed based on most recent deltaTicks if any counts received, else speed is 0
-    if(deltaLCounts > 0)
+    if(deltaLCounts != 0)
     {
       leftSpeed_ = encoderMetersPerIrq / static_cast<float>(deltaLTicks) * 1000.0;
+      if (!leftFwd_)
+        leftSpeed_ = -leftSpeed_;
     }
     else
     {
       leftSpeed_ = 0.0;
     }
-    if(deltaRCounts > 0)
+    if(deltaRCounts != 0)
     {
       rightSpeed_ = encoderMetersPerIrq / static_cast<float>(deltaRTicks) * 1000.0;
+      if (!rightFwd_)
+        rightSpeed_ = -rightSpeed_;
     }
     else
     {
@@ -204,6 +216,18 @@ MowbotOdometry::run(void* params)
     OdometryMsg odom;
     populateOdomStruct(odom);
     mediator_->publishOdometry(odom);
+    seq_++;     // increment the OdomMsg seqence #
+    odomLog_.verboseln("deltaL_m: %F deltaR_m: %F heading_rad_: %F leftSpeed_: %F rightSpeed_: %F",
+          deltaL_m, deltaR_m, heading_rad_, leftSpeed_, rightSpeed_);
+
+    // detect blown frame
+    int32_t now = xTaskGetTickCount();
+    int32_t overrun = now - lastFrameTime - 50;
+    if (overrun > 0)
+    {
+      odomLog_.errorln("Blew frame by %d ms, last frametime: %d, frame startTime: %d", overrun, lastFrameTime, frameStartTime);
+      lastFrameTime = xTaskGetTickCount();
+    }
 
     // delay until start of next 50ms frame
     vTaskDelayUntil(&lastFrameTime, frameTime_ms);
@@ -232,6 +256,8 @@ MowbotOdometry::getOdometry(float& poseX, float& poseY, float& heading,
 void
 MowbotOdometry::populateOdomStruct(OdometryMsg& odom)
 {
+  odom.seq = seq_;
+  odom.espTimestamp = xTaskGetTickCount();
   odom.poseX_m = poseX_m_;
   odom.poseY_m = poseY_m_;
   odom.heading_rad = heading_rad_;
@@ -245,6 +271,8 @@ MowbotOdometry::populateOdomStruct(OdometryMsg& odom)
 
   odom.leftEncoderCount = leftEncoderCount_;
   odom.rightEncoderCount = rightEncoderCount_;
+  odom.leftWheelAngle_rad = leftWheelAngle_rad_;
+  odom.rightWheelAngle_rad = rightWheelAngle_rad_;
 }
 
 void
@@ -264,7 +292,16 @@ MowbotOdometry::getEncoders(int& leftEnc, int& rightEnc)
 void
 MowbotOdometry::setWheelDirections(bool leftFwd, bool rightFwd)
 {
+  // protect data change with mutex at inter-task interface
+  if (pdFALSE == xSemaphoreTake(wheelDirMutex_, 5))
+  {
+    odomLog_.errorln("Failed to acquire wheelDirMutex - setting speed anyway");
+  }
   leftFwd_ = leftFwd;
   rightFwd_ = rightFwd;
+  if (pdFALSE == xSemaphoreGive(wheelDirMutex_))
+  {
+    odomLog_.errorln("Failed to acquire wheelDirMutex - setting speed anyway");
+  }
 }
 

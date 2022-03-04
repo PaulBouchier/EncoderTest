@@ -4,6 +4,8 @@
 #include <ArduinoLog.h>
 #include <OdometryMsg.h>
 #include <Mediator.h>
+#define _USE_MATH_DEFINES
+#include <cmath>
 
 class Mediator;
 
@@ -21,14 +23,19 @@ public:
   void setWheelDirections(bool leftFwd, bool rightFwd);
   Logging odomLog_;
   void setMediator(Mediator* mediator) { mediator_ = mediator; }
+  UBaseType_t getStackHighWaterMark() { return uxTaskGetStackHighWaterMark(mowbotOdometryTaskHandle_);}
 
 private:
   void populateOdomStruct(OdometryMsg& odometry);
 
   const float encoderMetersPerIrq = 0.0075;   // how far mowbot travels each endoder transition
-  const float wheelbase_m = 0.444;      // distance between mowbot rear wheels
+  const float wheelbase_m = 0.444;            // distance between mowbot rear wheels
+  const float wheelRadius_m = 0.127;          // drive wheel radius
+  const float wheelCircum_m = 2 * M_PI * wheelRadius_m;
+  const float irqsPerRot = wheelCircum_m / encoderMetersPerIrq;
   const int frameTime_ms = 50;
 
+  int32_t seq_ = 0;             // OdomMsg sequence #
   float poseX_m_ = 0;           // x location relative to start
   float poseY_m_ = 0;           // y location relative to start
   float heading_rad_ = 0;       // heading relative to start, in ENU coord frame (+ve is CCW)
@@ -40,8 +47,10 @@ private:
   float leftSpeed_ = 0.0;       // left wheel speed m/s
   float rightSpeed_ = 0.0;      // right wheel speed m/s
 
-  int leftEncoderCount_ = 0;     // running count of left encoder counts
-  int rightEncoderCount_ = 0;    // running count of right encoder counts
+  int leftEncoderCount_ = 0;    // running count of left encoder counts
+  float leftWheelAngle_rad_ = 0; // wheel angle in radians
+  int rightEncoderCount_ = 0;   // running count of right encoder counts
+  float rightWheelAngle_rad_ = 0;
 
   TickType_t lastLeftTick_ = 0;  // Time when last left tick was observed
   TickType_t lastRightTick_ = 0; // Time when last right tick was observed
@@ -50,4 +59,5 @@ private:
 
   TaskHandle_t mowbotOdometryTaskHandle_ = NULL;
   Mediator* mediator_ = NULL;
+  SemaphoreHandle_t wheelDirMutex_;
 };

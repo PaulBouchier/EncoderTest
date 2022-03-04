@@ -4,6 +4,7 @@ LogStream::LogStream()
 {
   buff_ = new char[128];
   buffp_ = buff_;
+  logLength_ = 0;
 }
 
 size_t
