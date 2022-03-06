@@ -28,7 +28,7 @@ public:
 private:
   void populateOdomStruct(OdometryMsg& odometry);
 
-  const float encoderMetersPerIrq = 0.0075;   // how far mowbot travels each endoder transition
+  const float encoderMetersPerIrq = 0.00714;   // how far mowbot travels each endoder transition
   const float wheelbase_m = 0.444;            // distance between mowbot rear wheels
   const float wheelRadius_m = 0.127;          // drive wheel radius
   const float wheelCircum_m = 2 * M_PI * wheelRadius_m;
