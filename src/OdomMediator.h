@@ -12,6 +12,7 @@ public:
   void publishOdometry(OdometryMsg odom);
 
   // dummy defs to staisfy Mediator
+  void clearOdometry() {}
   void setWheelDirections(bool leftFwd, bool rightFwd) {}
   void sendLogMsg(char* logMsg, int length) {}
   void setDrive(int32_t seq, float linear_vel, float angular_vel) {}

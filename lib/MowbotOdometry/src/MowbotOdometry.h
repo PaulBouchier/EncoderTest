@@ -18,6 +18,7 @@ public:
   void run(void* params);       // odometry task starts running here
   void getOdometry(float& poseX, float& poseY, float& heading,  float& speedX, float& speedY, float& linearSpeed,
                   float& angular_speed, float& odometer, float& speedL, float& speedR);
+  void clearOdometry();
   void getWheelSpeeds(float& speedL, float& speedR);
   void getEncoders(int& leftEnc, int& rightEnc);
   void setWheelDirections(bool leftFwd, bool rightFwd);

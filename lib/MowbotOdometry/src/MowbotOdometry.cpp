@@ -254,6 +254,25 @@ MowbotOdometry::getOdometry(float& poseX, float& poseY, float& heading,
 }
 
 void
+MowbotOdometry::clearOdometry()
+{
+  poseX_m_ = 0;
+  poseY_m_ = 0;
+  heading_rad_ = 0;
+  speedX_mps_ = 0;
+  speedY_mps_ = 0;
+  linear_speed_mps_ = 0;
+  angular_speed_rps_ = 0;
+  odometer_m_ = 0;
+  leftSpeed_ = 0;
+  rightSpeed_ = 0;
+  leftEncoderCount_ = 0;
+  rightEncoderCount_ = 0;
+  leftWheelAngle_rad_ = 0;
+  rightWheelAngle_rad_ = 0;
+}
+
+void
 MowbotOdometry::populateOdomStruct(OdometryMsg& odom)
 {
   odom.seq = seq_;
