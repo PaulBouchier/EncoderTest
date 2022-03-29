@@ -6,6 +6,10 @@
 #include <Mediator.h>
 #define _USE_MATH_DEFINES
 #include <cmath>
+#include <SPI.h>
+#include <Wire.h>
+#include <Adafruit_Sensor.h>
+#include <Adafruit_BNO055.h>
 
 class Mediator;
 
@@ -16,7 +20,7 @@ public:
   MowbotOdometry();
   bool init(int logLevel, Stream* logStream=NULL); // initialize MowbotOdometry, passing a stream pointer for logging
   void run(void* params);       // odometry task starts running here
-  void getOdometry(float& poseX, float& poseY, float& heading,  float& speedX, float& speedY, float& linearSpeed,
+  void getOdometry(float& poseX, float& poseY, float& heading, float& odom_heading, float& speedX, float& speedY, float& linearSpeed,
                   float& angular_speed, float& odometer, float& speedL, float& speedR);
   void clearOdometry();
   void getWheelSpeeds(float& speedL, float& speedR);
@@ -39,7 +43,8 @@ private:
   int32_t seq_ = 0;             // OdomMsg sequence #
   float poseX_m_ = 0;           // x location relative to start
   float poseY_m_ = 0;           // y location relative to start
-  float heading_rad_ = 0;       // heading relative to start, in ENU coord frame (+ve is CCW)
+  float heading_rad_ = 0;       // absolute heading relative to East, measured by BNO055, in ENU coord frame (+ve is CCW) REP-103
+  float odom_heading_rad_ = 0;  // heading relative to start, computed from odometry, in ENU coord frame (+ve is CCW)
   float speedX_mps_ = 0;        // speed in X direction
   float speedY_mps_ = 0;        // speed in Y direction
   float linear_speed_mps_ = 0;  // linear speed in m/sec
@@ -57,6 +62,9 @@ private:
   TickType_t lastRightTick_ = 0; // Time when last right tick was observed
   bool leftFwd_ = true;
   bool rightFwd_ = true;
+
+  Adafruit_BNO055 bno = Adafruit_BNO055(-1, 0x28);
+  uint16_t imuCalStatus_ = 0;
 
   TaskHandle_t mowbotOdometryTaskHandle_ = NULL;
   Mediator* mediator_ = NULL;

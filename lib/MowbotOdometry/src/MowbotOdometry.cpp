@@ -98,6 +98,23 @@ MowbotOdometry::init(int logLevel, Stream* stream_p)
 
   wheelDirMutex_ = xSemaphoreCreateMutex();
 
+  // Initialize the IMU
+  while(!bno.begin())
+  {
+    /* There was a problem detecting the BNO055 ... check connections */
+    Serial.println("No BNO055 detected ... Check wiring!");
+    odomLog_.fatalln("No BNO055 detected ... Check wiring!");
+    delay(2000);    // periodically print the failure message
+  }
+
+    // read compass heading from IMU and initialize odom_heading from it.
+    imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+    // REP-103 defines yaw = 0 as east, +ve yaw is CCW
+    heading_rad_ = (2 * M_PI) - (euler.x() * (M_PI / 180)) + M_PI_2;
+    if (heading_rad_ > (2 * M_PI))
+      heading_rad_ -= (2 * M_PI);
+    odom_heading_rad_ = heading_rad_;
+
   // create MowbotOdometry task
   BaseType_t rv = xTaskCreate(
                     startOdometryTask,
@@ -112,7 +129,7 @@ MowbotOdometry::init(int logLevel, Stream* stream_p)
   {
     Serial.println("Failed to create MowbotOdometry task; stopped");
     odomLog_.fatalln("Failed to create MowbotOdometry task; stopped");
-    vTaskDelay(2000);   // periodically print the failed message
+    delay(2000);   // periodically print the failed message
   }
 
   return isok;
@@ -180,11 +197,11 @@ MowbotOdometry::run(void* params)
     float deltaHeading = (deltaR_m - deltaL_m) / wheelbase_m;  // radians turned this frame
     angular_speed_rps_ = deltaHeading * (1000 / frameTime_ms);
 
-    heading_rad_ += deltaHeading;
-    heading_rad_ -= (float)((int)(heading_rad_ / (2 * M_PI))) * 2 * M_PI;  // clip to +/- 2 * pi
+    odom_heading_rad_ += deltaHeading;
+    odom_heading_rad_ -= (float)((int)(odom_heading_rad_ / (2 * M_PI))) * 2 * M_PI;  // clip to +/- 2 * pi
   
-    poseX_m_ += deltaD_m * cos(heading_rad_);
-    poseY_m_ += deltaD_m * sin(heading_rad_);
+    poseX_m_ += deltaD_m * cos(odom_heading_rad_);
+    poseY_m_ += deltaD_m * sin(odom_heading_rad_);
 
     // compute speed based on most recent deltaTicks if any counts received, else speed is 0
     if(deltaLCounts != 0)
@@ -209,16 +226,27 @@ MowbotOdometry::run(void* params)
     }
 
     linear_speed_mps_ = (leftSpeed_ + rightSpeed_) / 2.0;
-    speedX_mps_ = linear_speed_mps_ * sin(heading_rad_);
-    speedY_mps_ = linear_speed_mps_ * cos(heading_rad_);
+    speedX_mps_ = linear_speed_mps_ * sin(odom_heading_rad_);
+    speedY_mps_ = linear_speed_mps_ * cos(odom_heading_rad_);
+
+    // read compass heading from IMU. Heading 0 is north, increases with CW rotation.
+    imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+    // REP-103 defines yaw = 0 as east, +ve yaw is CCW
+    heading_rad_ = (2 * M_PI) - (euler.x() * (M_PI / 180)) + M_PI_2;
+    if (heading_rad_ > (2 * M_PI))
+      heading_rad_ -= (2 * M_PI);
+
+    uint8_t system, gyro, accel, mag = 0;
+    bno.getCalibration(&system, &gyro, &accel, &mag);
+    imuCalStatus_ = ((uint16_t) system)<<12 | ((uint16_t)gyro)<<8 | accel<<4 | mag;
 
     // Publish odometry
     OdometryMsg odom;
     populateOdomStruct(odom);
     mediator_->publishOdometry(odom);
     seq_++;     // increment the OdomMsg seqence #
-    odomLog_.verboseln("deltaL_m: %F deltaR_m: %F heading_rad_: %F leftSpeed_: %F rightSpeed_: %F",
-          deltaL_m, deltaR_m, heading_rad_, leftSpeed_, rightSpeed_);
+    odomLog_.verboseln("deltaL_m: %F deltaR_m: %F heading_rad_: %F odom_heading_rad_: %F leftSpeed_: %F rightSpeed_: %F, IMUCal SGAM: %X",
+          deltaL_m, deltaR_m, heading_rad_, odom_heading_rad_, leftSpeed_, rightSpeed_, imuCalStatus_);
 
     // detect blown frame
     int32_t now = xTaskGetTickCount();
@@ -236,7 +264,7 @@ MowbotOdometry::run(void* params)
 }
 
 void
-MowbotOdometry::getOdometry(float& poseX, float& poseY, float& heading,
+MowbotOdometry::getOdometry(float& poseX, float& poseY, float& heading, float& odom_heading,
                             float& speedX, float& speedY, float& linearSpeed,
                             float& angular_speed, float& odometer,
                             float& speedL, float& speedR)
@@ -244,6 +272,7 @@ MowbotOdometry::getOdometry(float& poseX, float& poseY, float& heading,
   poseX = poseX_m_;
   poseY = poseY_m_;
   heading = heading_rad_;
+  odom_heading = odom_heading_rad_;
   speedX = speedX_mps_;
   speedY = speedY_mps_;
   linearSpeed = linear_speed_mps_;
@@ -258,7 +287,7 @@ MowbotOdometry::clearOdometry()
 {
   poseX_m_ = 0;
   poseY_m_ = 0;
-  heading_rad_ = 0;
+  odom_heading_rad_ = heading_rad_;
   speedX_mps_ = 0;
   speedY_mps_ = 0;
   linear_speed_mps_ = 0;
@@ -270,6 +299,7 @@ MowbotOdometry::clearOdometry()
   rightEncoderCount_ = 0;
   leftWheelAngle_rad_ = 0;
   rightWheelAngle_rad_ = 0;
+  imuCalStatus_ = 0;
 }
 
 void
@@ -280,6 +310,7 @@ MowbotOdometry::populateOdomStruct(OdometryMsg& odom)
   odom.poseX_m = poseX_m_;
   odom.poseY_m = poseY_m_;
   odom.heading_rad = heading_rad_;
+  odom.odom_heading_rad = odom_heading_rad_;
   odom.speedX_mps = speedX_mps_;
   odom.speedY_mps = speedY_mps_;
   odom.linear_speed_mps = linear_speed_mps_;
@@ -292,6 +323,7 @@ MowbotOdometry::populateOdomStruct(OdometryMsg& odom)
   odom.rightEncoderCount = rightEncoderCount_;
   odom.leftWheelAngle_rad = leftWheelAngle_rad_;
   odom.rightWheelAngle_rad = rightWheelAngle_rad_;
+  odom.IMUCalStatus = imuCalStatus_;
 }
 
 void
