@@ -32,6 +32,7 @@ public:
 
 private:
   void populateOdomStruct(OdometryMsg& odometry);
+  float compass2Heading(float x);  // convert compass o/p (North = 0, CW +ve) to ROS convention
 
   const float encoderMetersPerIrq = 0.00714;   // how far mowbot travels each endoder transition
   const float wheelbase_m = 0.444;            // distance between mowbot rear wheels

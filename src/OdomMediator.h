@@ -23,8 +23,4 @@ public:
 private:
   MowbotOdometry& mowbotOdometry_;
 
-  // track last received encoder counts so we know when odometry has changed
-  int lastLeftEncCnt_ = 0;
-  int lastRightEncCnt_ = 0;
-
 };

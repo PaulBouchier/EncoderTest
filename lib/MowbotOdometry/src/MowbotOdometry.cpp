@@ -107,13 +107,11 @@ MowbotOdometry::init(int logLevel, Stream* stream_p)
     delay(2000);    // periodically print the failure message
   }
 
-    // read compass heading from IMU and initialize odom_heading from it.
-    imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
-    // REP-103 defines yaw = 0 as east, +ve yaw is CCW
-    heading_rad_ = (2 * M_PI) - (euler.x() * (M_PI / 180)) + M_PI_2;
-    if (heading_rad_ > (2 * M_PI))
-      heading_rad_ -= (2 * M_PI);
-    odom_heading_rad_ = heading_rad_;
+  // read compass heading from IMU. Heading 0 is north, increases with CW rotation.
+  imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
+  
+  heading_rad_ = compass2Heading(euler.x());
+  odom_heading_rad_ = heading_rad_;
 
   // create MowbotOdometry task
   BaseType_t rv = xTaskCreate(
@@ -231,10 +229,7 @@ MowbotOdometry::run(void* params)
 
     // read compass heading from IMU. Heading 0 is north, increases with CW rotation.
     imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
-    // REP-103 defines yaw = 0 as east, +ve yaw is CCW
-    heading_rad_ = (2 * M_PI) - (euler.x() * (M_PI / 180)) + M_PI_2;
-    if (heading_rad_ > (2 * M_PI))
-      heading_rad_ -= (2 * M_PI);
+    heading_rad_ = compass2Heading(euler.x());
 
     uint8_t system, gyro, accel, mag = 0;
     bno.getCalibration(&system, &gyro, &accel, &mag);
@@ -245,8 +240,9 @@ MowbotOdometry::run(void* params)
     populateOdomStruct(odom);
     mediator_->publishOdometry(odom);
     seq_++;     // increment the OdomMsg seqence #
-    odomLog_.verboseln("deltaL_m: %F deltaR_m: %F heading_rad_: %F odom_heading_rad_: %F leftSpeed_: %F rightSpeed_: %F, IMUCal SGAM: %X",
-          deltaL_m, deltaR_m, heading_rad_, odom_heading_rad_, leftSpeed_, rightSpeed_, imuCalStatus_);
+    odomLog_.verboseln("Odom: deltaL_m: %F deltaR_m: %F heading_rad_: %F odom_heading_rad_: %F leftSpeed_: %F rightSpeed_: %F, IMUCal SGAM: %X, euler.x(): %F",
+          deltaL_m, deltaR_m, heading_rad_, odom_heading_rad_, leftSpeed_, rightSpeed_, imuCalStatus_, euler.x());
+    odomLog_.verboseln("Odom: IMUCal SGAM: %X, euler.x: %F, y: %F, z: %F", imuCalStatus_, euler.x(), euler.y(), euler.z());
 
     // detect blown frame
     int32_t now = xTaskGetTickCount();
@@ -354,5 +350,31 @@ MowbotOdometry::setWheelDirections(bool leftFwd, bool rightFwd)
   {
     odomLog_.errorln("Failed to acquire wheelDirMutex - setting speed anyway");
   }
+}
+
+float
+MowbotOdometry::compass2Heading(float x)
+{
+  const float twoPi = 2 * M_PI;
+  float x_rad = (x / 360) * twoPi;
+  float heading_rad;
+
+  const float magnetic_declination = (2.84 / 360) * twoPi;  // 2.84 degrees east in Dallas
+  // IMU is mounted with pin 1 facing back right corner, i.e. North edge of chip points out right
+  // side of robot, East edge point out back of robot
+  const float IMU_mount_declination = (0 / 360) * twoPi;
+  const float east_is_0_correction = 0 - M_PI_2;
+  const float declination_correction = magnetic_declination + IMU_mount_declination + east_is_0_correction;
+
+  // REP-103 defines yaw = 0 as east, +ve yaw is CCW. 0 from compass is North.
+  heading_rad = twoPi - (x_rad + declination_correction);
+
+  // normalize output to 0 - 2*pi
+  if (heading_rad > twoPi)
+    heading_rad -= twoPi;
+  if (heading_rad < 0)
+    heading_rad += twoPi;
+
+ return heading_rad;
 }
 
