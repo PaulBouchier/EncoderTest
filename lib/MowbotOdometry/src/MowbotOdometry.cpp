@@ -106,6 +106,7 @@ MowbotOdometry::init(int logLevel, Stream* stream_p)
     odomLog_.fatalln("No BNO055 detected ... Check wiring!");
     delay(2000);    // periodically print the failure message
   }
+  bno.setExtCrystalUse(true);
 
   // read compass heading from IMU. Heading 0 is north, increases with CW rotation.
   imu::Vector<3> euler = bno.getVector(Adafruit_BNO055::VECTOR_EULER);
